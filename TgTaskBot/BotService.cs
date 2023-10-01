@@ -6,8 +6,10 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using System.Linq;
 using Newtonsoft.Json.Linq;
+using Npgsql;
+using Dapper;
 
-namespace TGbot
+namespace TgTaskBot
 {
     public class BotService
     {
@@ -60,10 +62,10 @@ namespace TGbot
                 if (callbackData.StartsWith("delete_"))
                 {
                     var taskId = callbackData.Replace("delete_", "");
-                    if (taskList.TryGetValue(taskId, out Todo? task))
+                    var taskName = await GetTaskNameByIdAsync(taskId, cancellationToken);
+                    if (!string.IsNullOrEmpty(taskName))
                     {
-                        string taskName = task.Name;
-                        taskList.Remove(taskId);
+                        await DeleteTaskByIdAsync(taskId, cancellationToken);
                         await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' deleted.", cancellationToken: cancellationToken);
                     }
                     else
@@ -177,7 +179,7 @@ namespace TGbot
                 case "/list":
                 case "/list@bright_tasks_bot":
                     _userStateService.SetState(chatId, UserState.TaskList);
-                    await ShowTaskList(chatId, cancellationToken);
+                    await ShowTaskList(chatId,cancellationToken);
                     break;
 
                 case "/complete":
@@ -206,6 +208,12 @@ namespace TGbot
         async Task AddTask(long chatId, string messageText, CancellationToken cancellationToken)
         {
             var todo = new Todo(messageText);
+            using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
+            {
+                string sql = $"insert into tasks(id, name, isdone, chatid) values (@id, @name, @isdone, @chatid)";
+                await conn.ExecuteAsync(sql, new { id = todo.Id, name = todo.Name, isdone = todo.IsDone, chatid = chatId });
+            }
+
             taskList.Add(todo.Id, todo);
             Console.WriteLine($"ID: {todo.Id}, task: {todo.Name}");
             await _botClient.SendTextMessageAsync(
@@ -218,76 +226,113 @@ namespace TGbot
 
         async Task ShowTaskList(long chatId, CancellationToken cancellationToken)
         {
-            if (taskList.Count > 0)
+            using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
             {
-                InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndShow());
-                await _botClient.SendTextMessageAsync(
-                    chatId: chatId,
-                    text: "Your task list \U0001F447",
-                    replyMarkup: inlineKeyboard,
-                    cancellationToken: cancellationToken
-                    );
-            }
-            else
-            {
-                await _botClient.SendTextMessageAsync(
-                   chatId: chatId,
-                   text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
-                   cancellationToken: cancellationToken
-                   );
-            }
+                string sql = "SELECT id, name, isdone, chatid FROM tasks WHERE chatid = @chatId";
+                //IEnumerable<Todo> todoListCount = conn.Query<Todo>(sql, new { chatId });
+                var todoList = await conn.QueryAsync<Todo>(sql, new { chatId });
+                foreach (Todo todo in todoList)
+                {
+                    Console.WriteLine(todo.Name);
+                }
+
+                if (todoList.Any())
+                {
+                    InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndShow(todoList));
+                    await _botClient.SendTextMessageAsync(
+                        chatId: chatId,
+                        text: "Your task list \U0001F447",
+                        replyMarkup: inlineKeyboard,
+                        cancellationToken: cancellationToken
+                        );
+                }
+                else
+                {
+                    await _botClient.SendTextMessageAsync(
+                       chatId: chatId,
+                       text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
+                       cancellationToken: cancellationToken
+                       );
+                }
+            }         
         }
 
-        private InlineKeyboardButton[][] GetKeyboardButtonsAndShow()
+        private InlineKeyboardButton[][] GetKeyboardButtonsAndShow(IEnumerable<Todo> tasks)
         {
-            int count = taskList.Count;
+            //int count = taskList.Count;
+            //var buttons = new InlineKeyboardButton[count][];
+            //var values = taskList.Values.ToArray();
+            //var names = values.Select(todo => (todo.IsDone ? "\u2705" : "\u25FD") + todo.Name).ToArray();
+
+            //for (int i = 0; i < count; i++)
+            //{
+            //    buttons[i] = new[] { new InlineKeyboardButton(names[i]) { CallbackData = $"show_{values[i].Id}" } };
+            //}
+            //return buttons;
+
+            int count = tasks.Count();
             var buttons = new InlineKeyboardButton[count][];
-            var values = taskList.Values.ToArray();
-            var names = values.Select(todo => (todo.IsDone ? "\u2705" : "\u25FD") + todo.Name).ToArray();
 
             for (int i = 0; i < count; i++)
             {
-                buttons[i] = new[] { new InlineKeyboardButton(names[i]) { CallbackData = $"show_{values[i].Id}" } };
+                var todo = tasks.ElementAt(i);
+                var buttonText = (todo.IsDone ? "\u2705" : "\u25FD") + todo.Name;
+                var callbackData = $"show_{todo.Id}";
+                buttons[i] = new[] { new InlineKeyboardButton(buttonText) { CallbackData = callbackData } };                
             }
             return buttons;
         }
 
         async Task DeleteTask(long chatId, CancellationToken cancellationToken)
         {
-            var values = taskList.Values.ToArray();
-            if (values.Length > 0)
+            using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
             {
-                InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndDelete());
-                await _botClient.SendTextMessageAsync(
-                    chatId: chatId,
-                    text: "Select a task you want to delete",
-                    replyMarkup: inlineKeyboard,
-                    cancellationToken: cancellationToken
-                );
-            }
-            else
-            {
-                await _botClient.SendTextMessageAsync(
-                   chatId: chatId,
-                   text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
-                   cancellationToken: cancellationToken
-                   );
+                string sql = "SELECT id, name, isdone, chatid FROM tasks WHERE chatid = @chatId";
+                var todoList = await conn.QueryAsync<Todo>(sql, new { chatId });
+
+                if (todoList.Any())
+                {
+                    InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndDelete(todoList));
+                    await _botClient.SendTextMessageAsync(
+                        chatId: chatId,
+                        text: "Select a task you want to delete",
+                        replyMarkup: inlineKeyboard,
+                        cancellationToken: cancellationToken
+                    );
+                }
+                else
+                {
+                    await _botClient.SendTextMessageAsync(
+                       chatId: chatId,
+                       text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
+                       cancellationToken: cancellationToken
+                       );
+                }
             }
         }
 
-        private InlineKeyboardButton[][] GetKeyboardButtonsAndDelete()
+        private InlineKeyboardButton[][] GetKeyboardButtonsAndDelete(IEnumerable<Todo> tasks)
         {
-            int count = taskList.Count;
-            var buttons = new InlineKeyboardButton[count][];
-            var values = taskList.Values.ToArray();
-            var keys = taskList.Keys.ToArray();
+            //int count = taskList.Count;
+            //var buttons = new InlineKeyboardButton[count][];
+            //var values = taskList.Values.ToArray();
+            //var keys = taskList.Keys.ToArray();
 
+            //for (int i = 0; i < count; i++)
+            //{
+            //    buttons[i] = new[]
+            //    {
+            //        new InlineKeyboardButton("\u274C" + " " + values[i].Name) { CallbackData = $"delete_{keys[i]}"},
+            //    };
+            //}
+            //return buttons;
+
+            int count = tasks.Count();
+            var buttons = new InlineKeyboardButton[count][];
             for (int i = 0; i < count; i++)
             {
-                buttons[i] = new[]
-                {
-                    new InlineKeyboardButton("\u274C" + " " + values[i].Name) { CallbackData = $"delete_{keys[i]}"},
-                };
+                var todo = tasks.ElementAt(i);               
+                buttons[i] = new[] { new InlineKeyboardButton("\u274C" + " " + todo.Name) { CallbackData = $"delete_{todo.Id}" } };
             }
             return buttons;
         }
@@ -347,6 +392,29 @@ namespace TGbot
             }
             return buttons;
         }
+
+        async Task<string> GetTaskNameByIdAsync(string taskId, CancellationToken cancellationToken)
+        {
+            using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
+            {
+                string sql = "SELECT name FROM tasks WHERE id = @taskId";
+                return await conn.ExecuteScalarAsync<string>(sql, new { taskId });
+            }
+        }
+
+        async Task<bool> DeleteTaskByIdAsync(string taskId, CancellationToken cancellationToken)
+        {
+            using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
+            {
+                string sql = "DELETE FROM tasks WHERE id = @taskId";
+                var affectedRows = await conn.ExecuteAsync(sql, new { taskId });
+
+                // If affectedRows > 0, a task was deleted; otherwise, the task didn't exist
+                return affectedRows > 0;
+            }
+        }
+
+
 
     }
 }
