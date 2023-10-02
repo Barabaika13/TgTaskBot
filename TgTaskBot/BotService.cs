@@ -15,7 +15,7 @@ namespace TgTaskBot
     {
         private readonly ITelegramBotClient _botClient;
         private readonly UserStateService _userStateService;
-        private Dictionary<string, Todo> taskList = new Dictionary<string, Todo>();
+        //private Dictionary<string, Todo> taskList = new Dictionary<string, Todo>();
 
         public BotService(ITelegramBotClient botClient)
         {
@@ -70,22 +70,45 @@ namespace TgTaskBot
                     }
                     else
                     {
-                        await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task has alreay been deleted.", cancellationToken: cancellationToken);
+                        await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task already deleted.", cancellationToken: cancellationToken);
                     }
                 }
 
                 else if (callbackData.StartsWith("complete_"))
                 {
                     var taskId = callbackData.Replace("complete_", "");
-                    string taskName = taskList[taskId].Name;
-                    taskList[taskId].IsDone = true;
-                    await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' marked as completed.", cancellationToken: cancellationToken);
+                    string? taskName = null;
+                    using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
+                    {
+                        string checkTaskSql = "SELECT name, isdone FROM tasks WHERE id = @taskId";
+                        var task = await conn.QueryFirstOrDefaultAsync<Todo>(checkTaskSql, new { taskId });
+                        if (task != null && !task.IsDone)
+                        {
+                            string completeTaskSql = "UPDATE tasks SET isdone = true WHERE id = @taskId";
+                            await conn.ExecuteAsync(completeTaskSql, new { taskId });
+                            taskName = task.Name;
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(taskName))
+                    {
+                        await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' marked as completed.", cancellationToken: cancellationToken);
+                    }
+                    else
+                    {
+                        await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Task already marked as completed.", cancellationToken: cancellationToken);
+                    }
+                    //string taskName = taskList[taskId].Name;
+                    //taskList[taskId].IsDone = true;
+                    //await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' marked as completed.", cancellationToken: cancellationToken);
 
                 }
+
+
                 else if (callbackData.StartsWith("show_"))
                 {
                     var taskId = callbackData.Replace("show_", "");
-                    string taskName = taskList[taskId].Name;
+                    var taskName = await GetTaskNameByIdAsync(taskId, cancellationToken);
+                    //string taskName = taskList[taskId].Name;
                     await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' is in your list", cancellationToken: cancellationToken);
 
                 }
@@ -214,7 +237,7 @@ namespace TgTaskBot
                 await conn.ExecuteAsync(sql, new { id = todo.Id, name = todo.Name, isdone = todo.IsDone, chatid = chatId });
             }
 
-            taskList.Add(todo.Id, todo);
+            //taskList.Add(todo.Id, todo);
             Console.WriteLine($"ID: {todo.Id}, task: {todo.Name}");
             await _botClient.SendTextMessageAsync(
                     chatId: chatId,
@@ -339,58 +362,101 @@ namespace TgTaskBot
 
         async Task CompleteTask(long chatId, CancellationToken cancellationToken)
         {
-            var values = taskList.Values.ToArray();
-            var incomplete = values.Where(todo => todo.IsDone == false).ToArray();
-
-            if (values.Length > 0 && incomplete.Length != 0)
+            using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
             {
-                InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndComplete());
-                await _botClient.SendTextMessageAsync(
-                    chatId: chatId,
-                    text: "Select a task to mark as completed:",
-                    replyMarkup: inlineKeyboard,
-                    cancellationToken: cancellationToken
-                );
+                string sql = "SELECT id, name FROM tasks WHERE chatid = @chatId AND isdone = false";
+                var incompleteTasks = await conn.QueryAsync<Todo>(sql, new { chatId });
+                if (incompleteTasks.Any())
+                {
+                    InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndComplete(incompleteTasks));
+                    await _botClient.SendTextMessageAsync(
+                        chatId: chatId,
+                        text: "Select a task to mark as completed:",
+                        replyMarkup: inlineKeyboard,
+                        cancellationToken: cancellationToken
+                    );
+                }
+                else
+                {
+                    string allCompletedSql = "SELECT COUNT(*) FROM tasks WHERE chatid = @chatId";
+                    var totalTasksCount = await conn.ExecuteScalarAsync<int>(allCompletedSql, new { chatId });
+                    if (totalTasksCount > 0)
+                    {
+                        await _botClient.SendTextMessageAsync(
+                            chatId: chatId,
+                            text: "You have all tasks in your list marked as completed",
+                            cancellationToken: cancellationToken
+                            );
+                    }
+                    else
+                    {
+                        await _botClient.SendTextMessageAsync(
+                            chatId: chatId,
+                            text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
+                            cancellationToken: cancellationToken
+                            );
+                    }
+                }
             }
 
-            else if (values.Length > 0 && incomplete.Length == 0)
-            {
-                await _botClient.SendTextMessageAsync(
-                   chatId: chatId,
-                   text: "You have all tasks in your list marked as completed",
-                   cancellationToken: cancellationToken
-                   );
-            }
+            //var values = taskList.Values.ToArray();
+            //var incomplete = values.Where(todo => todo.IsDone == false).ToArray();
 
-            else
-            {
-                await _botClient.SendTextMessageAsync(
-                   chatId: chatId,
-                   text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
-                   cancellationToken: cancellationToken
-                   );
-            }
+            //if (values.Length > 0 && incomplete.Length != 0)
+            //{
+            //    InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndComplete());
+            //    await _botClient.SendTextMessageAsync(
+            //        chatId: chatId,
+            //        text: "Select a task to mark as completed:",
+            //        replyMarkup: inlineKeyboard,
+            //        cancellationToken: cancellationToken
+            //    );
+            //}
+
+            //else if (values.Length > 0 && incomplete.Length == 0)
+            //{
+            //    await _botClient.SendTextMessageAsync(
+            //       chatId: chatId,
+            //       text: "You have all tasks in your list marked as completed",
+            //       cancellationToken: cancellationToken
+            //       );
+            //}
+
+            //else
+            //{
+            //    await _botClient.SendTextMessageAsync(
+            //       chatId: chatId,
+            //       text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
+            //       cancellationToken: cancellationToken
+            //       );
+            //}
         }
 
-        private InlineKeyboardButton[][] GetKeyboardButtonsAndComplete()
+        private InlineKeyboardButton[][] GetKeyboardButtonsAndComplete(IEnumerable<Todo> incompleteTasks)
         {
+            //var allTodos = taskList.Values.ToArray();
+            //var incompleteTodos = allTodos.Where(todo => todo.IsDone == false).ToArray();
+            //int count = incompleteTodos.Length;
+            //var buttons = new InlineKeyboardButton[count][];
 
-            var allTodos = taskList.Values.ToArray();
-            var incompleteTodos = allTodos.Where(todo => todo.IsDone == false).ToArray();
-            int count = incompleteTodos.Length;
-            var buttons = new InlineKeyboardButton[count][];
+            //var incompleteTaskKeys = allTodos.Where(x => x.IsDone == false).ToArray();
 
-            var incompleteTaskKeys = allTodos.Where(x => x.IsDone == false).ToArray();
+            //for (int i = 0; i < count; i++)
+            //{
+            //    buttons[i] = new[]
+            //       {
+            //            new InlineKeyboardButton("\u25FD" + " " + incompleteTodos[i].Name) { CallbackData = $"complete_{incompleteTaskKeys[i].Id}" },
+            //       };
 
-            for (int i = 0; i < count; i++)
+            //}
+            //return buttons;
+            var buttons = new List<InlineKeyboardButton[]>();
+            foreach (var task in incompleteTasks)
             {
-                buttons[i] = new[]
-                   {
-                        new InlineKeyboardButton("\u25FD" + " " + incompleteTodos[i].Name) { CallbackData = $"complete_{incompleteTaskKeys[i].Id}" },
-                   };
+                buttons.Add(new[] { new InlineKeyboardButton("\u25FD" + " " + task.Name) { CallbackData = $"complete_{task.Id}" } });
 
             }
-            return buttons;
+            return buttons.ToArray();
         }
 
         async Task<string> GetTaskNameByIdAsync(string taskId, CancellationToken cancellationToken)
@@ -412,9 +478,7 @@ namespace TgTaskBot
                 // If affectedRows > 0, a task was deleted; otherwise, the task didn't exist
                 return affectedRows > 0;
             }
-        }
-
-
+        }   
 
     }
 }
