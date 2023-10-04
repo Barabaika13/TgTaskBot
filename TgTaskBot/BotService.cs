@@ -77,8 +77,8 @@ namespace TgTaskBot
                     string? taskName = null;
                     using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
                     {
-                        string checkTaskSql = "SELECT name, isdone FROM tasks WHERE id = @taskId";
-                        var task = await conn.QueryFirstOrDefaultAsync<Todo>(checkTaskSql, new { taskId });
+                        string sql = "SELECT name, isdone FROM tasks WHERE id = @taskId";
+                        var task = await conn.QueryFirstOrDefaultAsync<Todo>(sql, new { taskId });
                         if (task != null && !task.IsDone)
                         {
                             string completeTaskSql = "UPDATE tasks SET isdone = true WHERE id = @taskId";
@@ -230,7 +230,7 @@ namespace TgTaskBot
             var todo = new Todo(messageText);
             using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
             {
-                string sql = $"insert into tasks(id, name, isdone, chatid) values (@id, @name, @isdone, @chatid)";
+                string sql = $"INSERT INTO tasks(id, name, isdone, chatid) VALUES (@id, @name, @isdone, @chatid)";
                 await conn.ExecuteAsync(sql, new { id = todo.Id, name = todo.Name, isdone = todo.IsDone, chatid = chatId });
             }
 
@@ -381,7 +381,7 @@ namespace TgTaskBot
                     {
                         await _botClient.SendTextMessageAsync(
                             chatId: chatId,
-                            text: "You have all tasks in your list marked as completed",
+                            text: "You have all tasks marked as completed in your list",
                             cancellationToken: cancellationToken
                             );
                     }

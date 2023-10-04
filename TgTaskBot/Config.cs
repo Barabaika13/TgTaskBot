@@ -1,13 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace TgTaskBot
+﻿namespace TgTaskBot
 {
     internal static class Config
     {
-        public static string SqlConnectionString = "Host=localhost;Port=5432;Database=taskmanager;Username=postgres;Password=Dorky270792";
+        public static string SqlConnectionString
+        {
+            get
+            {
+                string dbName = Environment.GetEnvironmentVariable("DB_NAME");
+                string dbUsername = Environment.GetEnvironmentVariable("DB_USERNAME");
+                string dbPassword = Environment.GetEnvironmentVariable("DB_PASSWORD");               
+
+                return $"Host=localhost;Port=5432;Database={dbName};Username={dbUsername};Password={dbPassword}";
+            }
+        }        
     }
 }
