@@ -1,11 +1,8 @@
-﻿using System.Windows.Markup;
-using Telegram.Bot;
+﻿using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using System.Linq;
-using Newtonsoft.Json.Linq;
 using Npgsql;
 using Dapper;
 
@@ -30,7 +27,7 @@ namespace TgTaskBot
                 if (update.Message is null)
                     return;
                 var message = update.Message;
-                var fromUser = message.From;
+                //var fromUser = message.From;
                 if (message.Text is null)
                     return;
 
@@ -43,7 +40,7 @@ namespace TgTaskBot
                 }
                 else
                 {
-                    await HandleMessageByState(fromUser, messageText, chatId, cancellationToken);
+                    await HandleMessageByState(messageText, chatId, cancellationToken);
                 }
             }
 
@@ -53,7 +50,7 @@ namespace TgTaskBot
                     return;
 
                 var callbackQuery = update.CallbackQuery;
-                var fromUser = callbackQuery.From;
+                //var fromUser = callbackQuery.From;
                 if (callbackQuery.Data == null)
                     return;
 
@@ -128,7 +125,7 @@ namespace TgTaskBot
             return Task.CompletedTask;
         }
 
-        async Task HandleMessageByState(User? fromUser, string messageText, long chatId, CancellationToken cancellationToken)
+        async Task HandleMessageByState(string messageText, long chatId, CancellationToken cancellationToken)
         {
             UserState userState = _userStateService.GetState(chatId);
             switch (userState)

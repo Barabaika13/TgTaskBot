@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace TgTaskBot
+﻿namespace TgTaskBot
 {
     public enum UserState
     {
@@ -14,7 +8,6 @@ namespace TgTaskBot
     public class UserStateService
     {
         private readonly Dictionary<long, UserState> _userState = new();
-
         public void SetState(long userId, UserState state)
         {
             _userState[userId] = state;

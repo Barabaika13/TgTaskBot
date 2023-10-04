@@ -1,21 +1,16 @@
-﻿using System.Threading;
-using Telegram.Bot;
-using Telegram.Bot.Exceptions;
+﻿using Telegram.Bot;
 using Telegram.Bot.Polling;
-using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using Telegram.Bot.Types.ReplyMarkups;
 
 namespace TgTaskBot
 {
     public class Program
     {
         static async Task Main(string[] args)
-        {            
-            var botClient = new TelegramBotClient("6605290851:AAHBZb--5TxRwmquaJePPXGjMLINKobyWHI");
-
+        {
+            string botToken = Environment.GetEnvironmentVariable("BOT_TOKEN");
+            var botClient = new TelegramBotClient(botToken);
             using CancellationTokenSource cts = new();
-
             ReceiverOptions receiverOptions = new()
             {
                 AllowedUpdates = Array.Empty<UpdateType>()
@@ -30,11 +25,9 @@ namespace TgTaskBot
             );
 
             var me = await botClient.GetMeAsync();
-
             Console.WriteLine($"Start listening for @{me.Username}");
             Console.ReadLine();
             cts.Cancel();
-
         }
     }
 }
