@@ -8,7 +8,7 @@ namespace TgTaskBot
     {
         static async Task Main(string[] args)
         {
-            string botToken = Environment.GetEnvironmentVariable("BOT_TOKEN");
+            var botToken = Environment.GetEnvironmentVariable("BOT_TOKEN");
             var botClient = new TelegramBotClient(botToken);
             using CancellationTokenSource cts = new();
             ReceiverOptions receiverOptions = new()

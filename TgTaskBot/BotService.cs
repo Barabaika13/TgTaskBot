@@ -11,8 +11,7 @@ namespace TgTaskBot
     public class BotService
     {
         private readonly ITelegramBotClient _botClient;
-        private readonly UserStateService _userStateService;
-        //private Dictionary<string, Todo> taskList = new Dictionary<string, Todo>();
+        private readonly UserStateService _userStateService;       
 
         public BotService(ITelegramBotClient botClient)
         {
@@ -26,8 +25,7 @@ namespace TgTaskBot
             {
                 if (update.Message is null)
                     return;
-                var message = update.Message;
-                //var fromUser = message.From;
+                var message = update.Message;                
                 if (message.Text is null)
                     return;
 
@@ -48,14 +46,11 @@ namespace TgTaskBot
             {
                 if (update.CallbackQuery is null)
                     return;
-
-                var callbackQuery = update.CallbackQuery;
-                //var fromUser = callbackQuery.From;
+                var callbackQuery = update.CallbackQuery;               
                 if (callbackQuery.Data == null)
                     return;
 
-                var callbackData = callbackQuery.Data;
-                //var chatId = callbackQuery.Message.Chat.Id;
+                var callbackData = callbackQuery.Data;                
                 if (callbackData.StartsWith("delete_"))
                 {
                     var taskId = callbackData.Replace("delete_", "");
@@ -94,18 +89,12 @@ namespace TgTaskBot
                     {
                         await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Task already marked as completed.", cancellationToken: cancellationToken);
                     }
-                    //string taskName = taskList[taskId].Name;
-                    //taskList[taskId].IsDone = true;
-                    //await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' marked as completed.", cancellationToken: cancellationToken);
-
-                }
-
+                }               
 
                 else if (callbackData.StartsWith("show_"))
                 {
                     var taskId = callbackData.Replace("show_", "");
-                    var taskName = await GetTaskNameByIdAsync(taskId, cancellationToken);
-                    //string taskName = taskList[taskId].Name;
+                    var taskName = await GetTaskNameByIdAsync(taskId, cancellationToken);                    
                     await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' is in your list", cancellationToken: cancellationToken);
 
                 }
@@ -232,9 +221,7 @@ namespace TgTaskBot
             {
                 string sql = $"INSERT INTO tasks(id, name, isdone, chatid) VALUES (@id, @name, @isdone, @chatid)";
                 await conn.ExecuteAsync(sql, new { id = todo.Id, name = todo.Name, isdone = todo.IsDone, chatid = chatId });
-            }
-
-            //taskList.Add(todo.Id, todo);
+            }            
             Console.WriteLine($"ID: {todo.Id}, task: {todo.Name}");
             await _botClient.SendTextMessageAsync(
                     chatId: chatId,
@@ -248,8 +235,7 @@ namespace TgTaskBot
         {
             using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
             {
-                string sql = "SELECT id, name, isdone, chatid FROM tasks WHERE chatid = @chatId";
-                //IEnumerable<Todo> todoListCount = conn.Query<Todo>(sql, new { chatId });
+                string sql = "SELECT id, name, isdone, chatid FROM tasks WHERE chatid = @chatId";               
                 var todoList = await conn.QueryAsync<Todo>(sql, new { chatId });
                 foreach (Todo todo in todoList)
                 {
@@ -279,17 +265,6 @@ namespace TgTaskBot
 
         private InlineKeyboardButton[][] GetKeyboardButtonsAndShow(IEnumerable<Todo> tasks)
         {
-            //int count = taskList.Count;
-            //var buttons = new InlineKeyboardButton[count][];
-            //var values = taskList.Values.ToArray();
-            //var names = values.Select(todo => (todo.IsDone ? "\u2705" : "\u25FD") + todo.Name).ToArray();
-
-            //for (int i = 0; i < count; i++)
-            //{
-            //    buttons[i] = new[] { new InlineKeyboardButton(names[i]) { CallbackData = $"show_{values[i].Id}" } };
-            //}
-            //return buttons;
-
             int count = tasks.Count();
             var buttons = new InlineKeyboardButton[count][];
 
@@ -298,10 +273,10 @@ namespace TgTaskBot
                 var todo = tasks.ElementAt(i);
                 var buttonText = (todo.IsDone ? "\u2705" : "\u25FD") + todo.Name;
                 var callbackData = $"show_{todo.Id}";
-                buttons[i] = new[] { new InlineKeyboardButton(buttonText) { CallbackData = callbackData } };                
+                buttons[i] = new[] { new InlineKeyboardButton(buttonText) { CallbackData = callbackData } };
             }
             return buttons;
-        }
+        }        
 
         async Task DeleteTask(long chatId, CancellationToken cancellationToken)
         {
@@ -333,29 +308,15 @@ namespace TgTaskBot
 
         private InlineKeyboardButton[][] GetKeyboardButtonsAndDelete(IEnumerable<Todo> tasks)
         {
-            //int count = taskList.Count;
-            //var buttons = new InlineKeyboardButton[count][];
-            //var values = taskList.Values.ToArray();
-            //var keys = taskList.Keys.ToArray();
-
-            //for (int i = 0; i < count; i++)
-            //{
-            //    buttons[i] = new[]
-            //    {
-            //        new InlineKeyboardButton("\u274C" + " " + values[i].Name) { CallbackData = $"delete_{keys[i]}"},
-            //    };
-            //}
-            //return buttons;
-
             int count = tasks.Count();
             var buttons = new InlineKeyboardButton[count][];
             for (int i = 0; i < count; i++)
             {
-                var todo = tasks.ElementAt(i);               
+                var todo = tasks.ElementAt(i);
                 buttons[i] = new[] { new InlineKeyboardButton("\u274C" + " " + todo.Name) { CallbackData = $"delete_{todo.Id}" } };
             }
             return buttons;
-        }
+        }       
 
         async Task CompleteTask(long chatId, CancellationToken cancellationToken)
         {
@@ -394,59 +355,11 @@ namespace TgTaskBot
                             );
                     }
                 }
-            }
-
-            //var values = taskList.Values.ToArray();
-            //var incomplete = values.Where(todo => todo.IsDone == false).ToArray();
-
-            //if (values.Length > 0 && incomplete.Length != 0)
-            //{
-            //    InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndComplete());
-            //    await _botClient.SendTextMessageAsync(
-            //        chatId: chatId,
-            //        text: "Select a task to mark as completed:",
-            //        replyMarkup: inlineKeyboard,
-            //        cancellationToken: cancellationToken
-            //    );
-            //}
-
-            //else if (values.Length > 0 && incomplete.Length == 0)
-            //{
-            //    await _botClient.SendTextMessageAsync(
-            //       chatId: chatId,
-            //       text: "You have all tasks in your list marked as completed",
-            //       cancellationToken: cancellationToken
-            //       );
-            //}
-
-            //else
-            //{
-            //    await _botClient.SendTextMessageAsync(
-            //       chatId: chatId,
-            //       text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
-            //       cancellationToken: cancellationToken
-            //       );
-            //}
+            }            
         }
 
         private InlineKeyboardButton[][] GetKeyboardButtonsAndComplete(IEnumerable<Todo> incompleteTasks)
-        {
-            //var allTodos = taskList.Values.ToArray();
-            //var incompleteTodos = allTodos.Where(todo => todo.IsDone == false).ToArray();
-            //int count = incompleteTodos.Length;
-            //var buttons = new InlineKeyboardButton[count][];
-
-            //var incompleteTaskKeys = allTodos.Where(x => x.IsDone == false).ToArray();
-
-            //for (int i = 0; i < count; i++)
-            //{
-            //    buttons[i] = new[]
-            //       {
-            //            new InlineKeyboardButton("\u25FD" + " " + incompleteTodos[i].Name) { CallbackData = $"complete_{incompleteTaskKeys[i].Id}" },
-            //       };
-
-            //}
-            //return buttons;
+        {            
             var buttons = new List<InlineKeyboardButton[]>();
             foreach (var task in incompleteTasks)
             {
@@ -470,12 +383,9 @@ namespace TgTaskBot
             using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
             {
                 string sql = "DELETE FROM tasks WHERE id = @taskId";
-                var affectedRows = await conn.ExecuteAsync(sql, new { taskId });
-
-                // If affectedRows > 0, a task was deleted; otherwise, the task didn't exist
+                var affectedRows = await conn.ExecuteAsync(sql, new { taskId });             
                 return affectedRows > 0;
             }
-        }   
-
+        } 
     }
 }
