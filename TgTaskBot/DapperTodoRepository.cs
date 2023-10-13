@@ -81,5 +81,25 @@ namespace TgTaskBot
                 }
             }
         }
+
+        public async Task<IEnumerable<Todo>> GetIncompleteTasksAsync(long chatId)
+        {
+            using (var conn = new NpgsqlConnection(_connectionString))
+            {
+                string sql = "SELECT id, name, isdone, chatid FROM tasks WHERE chatid = @chatId AND isdone = false";
+                var incompleteTasks = await conn.QueryAsync<Todo>(sql, new { chatId });
+                return incompleteTasks;
+            }
+        }
+
+        public async Task<int> GetTotalTaskCountAsync(long chatId)
+        {
+            using (var conn = new NpgsqlConnection(_connectionString))
+            {
+                string sql = "SELECT COUNT(*) FROM tasks WHERE chatid = @chatId";
+                var totalTasksCount = await conn.ExecuteScalarAsync<int>(sql, new { chatId });
+                return totalTasksCount;
+            }
+        }
     }
 }

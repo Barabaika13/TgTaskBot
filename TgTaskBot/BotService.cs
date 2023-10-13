@@ -294,30 +294,25 @@ namespace TgTaskBot
 
         async Task DeleteTask(long chatId, CancellationToken cancellationToken)
         {
-            using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
+            var todoList = await _todoRepository.GetTasksAsync(chatId);
+            if (todoList.Any())
             {
-                string sql = "SELECT id, name, isdone, chatid FROM tasks WHERE chatid = @chatId";
-                var todoList = await conn.QueryAsync<Todo>(sql, new { chatId });
-
-                if (todoList.Any())
-                {
-                    InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndDelete(todoList));
-                    await _botClient.SendTextMessageAsync(
-                        chatId: chatId,
-                        text: "Select a task you want to delete",
-                        replyMarkup: inlineKeyboard,
-                        cancellationToken: cancellationToken
-                    );
-                }
-                else
-                {
-                    await _botClient.SendTextMessageAsync(
-                       chatId: chatId,
-                       text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
-                       cancellationToken: cancellationToken
-                       );
-                }
+                InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndDelete(todoList));
+                await _botClient.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: "Select a task you want to delete",
+                    replyMarkup: inlineKeyboard,
+                    cancellationToken: cancellationToken
+                );
             }
+            else
+            {
+                await _botClient.SendTextMessageAsync(
+                   chatId: chatId,
+                   text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
+                   cancellationToken: cancellationToken
+                   );
+            }            
         }
 
         private InlineKeyboardButton[][] GetKeyboardButtonsAndDelete(IEnumerable<Todo> tasks)
@@ -334,43 +329,79 @@ namespace TgTaskBot
 
         async Task CompleteTask(long chatId, CancellationToken cancellationToken)
         {
-            using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
+            var incompleteTasks = await _todoRepository.GetIncompleteTasksAsync(chatId);
+            if (incompleteTasks.Any())
             {
-                string sql = "SELECT id, name FROM tasks WHERE chatid = @chatId AND isdone = false";
-                var incompleteTasks = await conn.QueryAsync<Todo>(sql, new { chatId });
-                if (incompleteTasks.Any())
+                InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndComplete(incompleteTasks));
+                await _botClient.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: "Select a task to mark as completed:",
+                    replyMarkup: inlineKeyboard,
+                    cancellationToken: cancellationToken
+                );
+            }
+            else
+            {
+                var totalTasksCount = await _todoRepository.GetTotalTaskCountAsync(chatId);
+                if (totalTasksCount > 0)
                 {
-                    InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndComplete(incompleteTasks));
                     await _botClient.SendTextMessageAsync(
                         chatId: chatId,
-                        text: "Select a task to mark as completed:",
-                        replyMarkup: inlineKeyboard,
+                        text: "You have all tasks marked as completed in your list",
                         cancellationToken: cancellationToken
-                    );
+                        );
                 }
                 else
                 {
-                    string allCompletedSql = "SELECT COUNT(*) FROM tasks WHERE chatid = @chatId";
-                    var totalTasksCount = await conn.ExecuteScalarAsync<int>(allCompletedSql, new { chatId });
-                    if (totalTasksCount > 0)
-                    {
-                        await _botClient.SendTextMessageAsync(
-                            chatId: chatId,
-                            text: "You have all tasks marked as completed in your list",
-                            cancellationToken: cancellationToken
-                            );
-                    }
-                    else
-                    {
-                        await _botClient.SendTextMessageAsync(
-                            chatId: chatId,
-                            text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
-                            cancellationToken: cancellationToken
-                            );
-                    }
+                    await _botClient.SendTextMessageAsync(
+                        chatId: chatId,
+                        text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
+                        cancellationToken: cancellationToken
+                        );
                 }
-            }            
+            }
+
+
+
+
+            //using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
+            //{
+            //    string sql = "SELECT id, name FROM tasks WHERE chatid = @chatId AND isdone = false";
+            //    var incompleteTasks = await conn.QueryAsync<Todo>(sql, new { chatId });
+            //    if (incompleteTasks.Any())
+            //    {
+            //        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndComplete(incompleteTasks));
+            //        await _botClient.SendTextMessageAsync(
+            //            chatId: chatId,
+            //            text: "Select a task to mark as completed:",
+            //            replyMarkup: inlineKeyboard,
+            //            cancellationToken: cancellationToken
+            //        );
+            //    }
+            //    else
+            //    {
+            //        string allCompletedSql = "SELECT COUNT(*) FROM tasks WHERE chatid = @chatId";
+            //        var totalTasksCount = await conn.ExecuteScalarAsync<int>(allCompletedSql, new { chatId });
+            //        if (totalTasksCount > 0)
+            //        {
+            //            await _botClient.SendTextMessageAsync(
+            //                chatId: chatId,
+            //                text: "You have all tasks marked as completed in your list",
+            //                cancellationToken: cancellationToken
+            //                );
+            //        }
+            //        else
+            //        {
+            //            await _botClient.SendTextMessageAsync(
+            //                chatId: chatId,
+            //                text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
+            //                cancellationToken: cancellationToken
+            //                );
+            //        }
+            //    }
+            //}            
         }
+
 
         private InlineKeyboardButton[][] GetKeyboardButtonsAndComplete(IEnumerable<Todo> incompleteTasks)
         {            
