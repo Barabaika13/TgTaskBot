@@ -10,12 +10,13 @@ namespace TgTaskBot
         {
             var botToken = Environment.GetEnvironmentVariable("BOT_TOKEN");
             var botClient = new TelegramBotClient(botToken);
+            ITodoRepository dapperTodoRepository = new DapperTodoRepository(Config.SqlConnectionString);
             using CancellationTokenSource cts = new();
             ReceiverOptions receiverOptions = new()
             {
                 AllowedUpdates = Array.Empty<UpdateType>()
             };
-            var service = new BotService(botClient);
+            var service = new BotService(botClient, dapperTodoRepository);
 
             botClient.StartReceiving(
                 updateHandler: service.HandleUpdateAsync,

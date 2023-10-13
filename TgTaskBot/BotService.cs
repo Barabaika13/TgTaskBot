@@ -11,12 +11,14 @@ namespace TgTaskBot
     public class BotService
     {
         private readonly ITelegramBotClient _botClient;
-        private readonly UserStateService _userStateService;       
+        private readonly UserStateService _userStateService;
+        private readonly ITodoRepository _todoRepository;
 
-        public BotService(ITelegramBotClient botClient)
+        public BotService(ITelegramBotClient botClient, ITodoRepository todoRepository)
         {
             _botClient = botClient;
             _userStateService = new();
+            _todoRepository = todoRepository;
         }
 
         public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
@@ -54,48 +56,73 @@ namespace TgTaskBot
                 if (callbackData.StartsWith("delete_"))
                 {
                     var taskId = callbackData.Replace("delete_", "");
-                    var taskName = await GetTaskNameByIdAsync(taskId, cancellationToken);
-                    if (!string.IsNullOrEmpty(taskName))
+                    //var taskName = await GetTaskNameByIdAsync(taskId, cancellationToken);
+                    var task = await _todoRepository.GetTaskByIdAsync(taskId);
+                    if (task != null)
                     {
-                        await DeleteTaskByIdAsync(taskId, cancellationToken);
-                        await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' deleted.", cancellationToken: cancellationToken);
+                        //await DeleteTaskByIdAsync(taskId, cancellationToken);
+                        //await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' deleted.", cancellationToken: cancellationToken);
+                        var isDeleted = await _todoRepository.DeleteTaskAsync(taskId);
+                        if (isDeleted)
+                        {
+                            await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{task.Name}' deleted.", cancellationToken: cancellationToken);
+                        }                        
                     }
                     else
                     {
                         await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task already deleted.", cancellationToken: cancellationToken);
                     }
+
                 }
+
+
+
+
+
 
                 else if (callbackData.StartsWith("complete_"))
                 {
                     var taskId = callbackData.Replace("complete_", "");
-                    string? taskName = null;
-                    using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
+                    //string? taskName = null;
+                    //var taskName = await GetTaskNameByIdAsync(taskId, cancellationToken);
+                    var task = await _todoRepository.GetTaskByIdAsync(taskId);
+                    //using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
+                    //{
+                    //    string sql = "SELECT name, isdone FROM tasks WHERE id = @taskId";
+                    //    var task = await conn.QueryFirstOrDefaultAsync<Todo>(sql, new { taskId });
+                    //    if (task != null && !task.IsDone)
+                    //    {
+                    //        string completeTaskSql = "UPDATE tasks SET isdone = true WHERE id = @taskId";
+                    //        await conn.ExecuteAsync(completeTaskSql, new { taskId });
+                    //        taskName = task.Name;
+                    //    }
+                    //}
+                    if (task != null && !task.IsDone)
                     {
-                        string sql = "SELECT name, isdone FROM tasks WHERE id = @taskId";
-                        var task = await conn.QueryFirstOrDefaultAsync<Todo>(sql, new { taskId });
-                        if (task != null && !task.IsDone)
+                        //await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' marked as completed.", cancellationToken: cancellationToken);
+                        var isCompleted = await _todoRepository.CompleteTaskAsync(taskId);
+                        if (isCompleted)
                         {
-                            string completeTaskSql = "UPDATE tasks SET isdone = true WHERE id = @taskId";
-                            await conn.ExecuteAsync(completeTaskSql, new { taskId });
-                            taskName = task.Name;
+                            await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{task.Name}' marked as completed.", cancellationToken: cancellationToken);
                         }
-                    }
-                    if (!string.IsNullOrEmpty(taskName))
-                    {
-                        await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' marked as completed.", cancellationToken: cancellationToken);
                     }
                     else
                     {
                         await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Task already marked as completed.", cancellationToken: cancellationToken);
                     }
-                }               
+                }
+                
+
+
+
+
 
                 else if (callbackData.StartsWith("show_"))
                 {
                     var taskId = callbackData.Replace("show_", "");
-                    var taskName = await GetTaskNameByIdAsync(taskId, cancellationToken);                    
-                    await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' is in your list", cancellationToken: cancellationToken);
+                    //var taskName = await GetTaskNameByIdAsync(taskId, cancellationToken);
+                    var task = await _todoRepository.GetTaskByIdAsync(taskId);
+                    await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{task.Name}' is in your list", cancellationToken: cancellationToken);
 
                 }
             }
@@ -217,11 +244,7 @@ namespace TgTaskBot
         async Task AddTask(long chatId, string messageText, CancellationToken cancellationToken)
         {
             var todo = new Todo(messageText);
-            using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
-            {
-                string sql = $"INSERT INTO tasks(id, name, isdone, chatid) VALUES (@id, @name, @isdone, @chatid)";
-                await conn.ExecuteAsync(sql, new { id = todo.Id, name = todo.Name, isdone = todo.IsDone, chatid = chatId });
-            }            
+            await _todoRepository.AddTaskAsync(todo, chatId);
             Console.WriteLine($"ID: {todo.Id}, task: {todo.Name}");
             await _botClient.SendTextMessageAsync(
                     chatId: chatId,
@@ -233,34 +256,25 @@ namespace TgTaskBot
 
         async Task ShowTaskList(long chatId, CancellationToken cancellationToken)
         {
-            using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
+            var todoList = await _todoRepository.GetTasksAsync(chatId);
+            if (todoList.Any())
             {
-                string sql = "SELECT id, name, isdone, chatid FROM tasks WHERE chatid = @chatId";               
-                var todoList = await conn.QueryAsync<Todo>(sql, new { chatId });
-                foreach (Todo todo in todoList)
-                {
-                    Console.WriteLine(todo.Name);
-                }
-
-                if (todoList.Any())
-                {
-                    InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndShow(todoList));
-                    await _botClient.SendTextMessageAsync(
-                        chatId: chatId,
-                        text: "Your task list \U0001F447",
-                        replyMarkup: inlineKeyboard,
-                        cancellationToken: cancellationToken
-                        );
-                }
-                else
-                {
-                    await _botClient.SendTextMessageAsync(
-                       chatId: chatId,
-                       text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
-                       cancellationToken: cancellationToken
-                       );
-                }
-            }         
+                InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndShow(todoList));
+                await _botClient.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: "Your task list \U0001F447",
+                    replyMarkup: inlineKeyboard,
+                    cancellationToken: cancellationToken
+                    );
+            }
+            else
+            {
+                await _botClient.SendTextMessageAsync(
+                   chatId: chatId,
+                   text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
+                   cancellationToken: cancellationToken
+                   );
+            }            
         }
 
         private InlineKeyboardButton[][] GetKeyboardButtonsAndShow(IEnumerable<Todo> tasks)
@@ -369,23 +383,23 @@ namespace TgTaskBot
             return buttons.ToArray();
         }
 
-        async Task<string> GetTaskNameByIdAsync(string taskId, CancellationToken cancellationToken)
-        {
-            using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
-            {
-                string sql = "SELECT name FROM tasks WHERE id = @taskId";
-                return await conn.ExecuteScalarAsync<string>(sql, new { taskId });
-            }
-        }
+        //async Task<string> GetTaskNameByIdAsync(string taskId, CancellationToken cancellationToken)
+        //{
+        //    using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
+        //    {
+        //        string sql = "SELECT name FROM tasks WHERE id = @taskId";
+        //        return await conn.ExecuteScalarAsync<string>(sql, new { taskId });
+        //    }
+        //}
 
-        async Task<bool> DeleteTaskByIdAsync(string taskId, CancellationToken cancellationToken)
-        {
-            using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
-            {
-                string sql = "DELETE FROM tasks WHERE id = @taskId";
-                var affectedRows = await conn.ExecuteAsync(sql, new { taskId });             
-                return affectedRows > 0;
-            }
-        } 
+        //async Task<bool> DeleteTaskByIdAsync(string taskId, CancellationToken cancellationToken)
+        //{
+        //    using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
+        //    {
+        //        string sql = "DELETE FROM tasks WHERE id = @taskId";
+        //        var affectedRows = await conn.ExecuteAsync(sql, new { taskId });             
+        //        return affectedRows > 0;
+        //    }
+        //} 
     }
 }
