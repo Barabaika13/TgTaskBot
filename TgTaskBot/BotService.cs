@@ -3,8 +3,7 @@ using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using Npgsql;
-using Dapper;
+
 
 namespace TgTaskBot
 {
@@ -55,13 +54,10 @@ namespace TgTaskBot
                 var callbackData = callbackQuery.Data;                
                 if (callbackData.StartsWith("delete_"))
                 {
-                    var taskId = callbackData.Replace("delete_", "");
-                    //var taskName = await GetTaskNameByIdAsync(taskId, cancellationToken);
+                    var taskId = callbackData.Replace("delete_", "");                    
                     var task = await _todoRepository.GetTaskByIdAsync(taskId);
                     if (task != null)
-                    {
-                        //await DeleteTaskByIdAsync(taskId, cancellationToken);
-                        //await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' deleted.", cancellationToken: cancellationToken);
+                    {                        
                         var isDeleted = await _todoRepository.DeleteTaskAsync(taskId);
                         if (isDeleted)
                         {
@@ -74,32 +70,12 @@ namespace TgTaskBot
                     }
 
                 }
-
-
-
-
-
-
                 else if (callbackData.StartsWith("complete_"))
                 {
                     var taskId = callbackData.Replace("complete_", "");
-                    //string? taskName = null;
-                    //var taskName = await GetTaskNameByIdAsync(taskId, cancellationToken);
                     var task = await _todoRepository.GetTaskByIdAsync(taskId);
-                    //using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
-                    //{
-                    //    string sql = "SELECT name, isdone FROM tasks WHERE id = @taskId";
-                    //    var task = await conn.QueryFirstOrDefaultAsync<Todo>(sql, new { taskId });
-                    //    if (task != null && !task.IsDone)
-                    //    {
-                    //        string completeTaskSql = "UPDATE tasks SET isdone = true WHERE id = @taskId";
-                    //        await conn.ExecuteAsync(completeTaskSql, new { taskId });
-                    //        taskName = task.Name;
-                    //    }
-                    //}
                     if (task != null && !task.IsDone)
-                    {
-                        //await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{taskName}' marked as completed.", cancellationToken: cancellationToken);
+                    {                        
                         var isCompleted = await _todoRepository.CompleteTaskAsync(taskId);
                         if (isCompleted)
                         {
@@ -111,16 +87,9 @@ namespace TgTaskBot
                         await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, "Task already marked as completed.", cancellationToken: cancellationToken);
                     }
                 }
-                
-
-
-
-
-
                 else if (callbackData.StartsWith("show_"))
                 {
-                    var taskId = callbackData.Replace("show_", "");
-                    //var taskName = await GetTaskNameByIdAsync(taskId, cancellationToken);
+                    var taskId = callbackData.Replace("show_", "");                    
                     var task = await _todoRepository.GetTaskByIdAsync(taskId);
                     await _botClient.AnswerCallbackQueryAsync(callbackQuery.Id, $"Task '{task.Name}' is in your list", cancellationToken: cancellationToken);
 
@@ -185,7 +154,6 @@ namespace TgTaskBot
                         );
                     break;
 
-
                 case "/help":
                 case "/help@bright_tasks_bot":
                     await _botClient.SendTextMessageAsync(
@@ -200,7 +168,6 @@ namespace TgTaskBot
                         cancellationToken: cancellationToken
                     );
                     break;
-
 
                 case "/create":
                 case "/create@bright_tasks_bot":
@@ -359,49 +326,8 @@ namespace TgTaskBot
                         cancellationToken: cancellationToken
                         );
                 }
-            }
-
-
-
-
-            //using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
-            //{
-            //    string sql = "SELECT id, name FROM tasks WHERE chatid = @chatId AND isdone = false";
-            //    var incompleteTasks = await conn.QueryAsync<Todo>(sql, new { chatId });
-            //    if (incompleteTasks.Any())
-            //    {
-            //        InlineKeyboardMarkup inlineKeyboard = new InlineKeyboardMarkup(GetKeyboardButtonsAndComplete(incompleteTasks));
-            //        await _botClient.SendTextMessageAsync(
-            //            chatId: chatId,
-            //            text: "Select a task to mark as completed:",
-            //            replyMarkup: inlineKeyboard,
-            //            cancellationToken: cancellationToken
-            //        );
-            //    }
-            //    else
-            //    {
-            //        string allCompletedSql = "SELECT COUNT(*) FROM tasks WHERE chatid = @chatId";
-            //        var totalTasksCount = await conn.ExecuteScalarAsync<int>(allCompletedSql, new { chatId });
-            //        if (totalTasksCount > 0)
-            //        {
-            //            await _botClient.SendTextMessageAsync(
-            //                chatId: chatId,
-            //                text: "You have all tasks marked as completed in your list",
-            //                cancellationToken: cancellationToken
-            //                );
-            //        }
-            //        else
-            //        {
-            //            await _botClient.SendTextMessageAsync(
-            //                chatId: chatId,
-            //                text: "You don't have any tasks in your list. To start adding tasks, use the /create command",
-            //                cancellationToken: cancellationToken
-            //                );
-            //        }
-            //    }
-            //}            
+            }                       
         }
-
 
         private InlineKeyboardButton[][] GetKeyboardButtonsAndComplete(IEnumerable<Todo> incompleteTasks)
         {            
@@ -412,25 +338,6 @@ namespace TgTaskBot
 
             }
             return buttons.ToArray();
-        }
-
-        //async Task<string> GetTaskNameByIdAsync(string taskId, CancellationToken cancellationToken)
-        //{
-        //    using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
-        //    {
-        //        string sql = "SELECT name FROM tasks WHERE id = @taskId";
-        //        return await conn.ExecuteScalarAsync<string>(sql, new { taskId });
-        //    }
-        //}
-
-        //async Task<bool> DeleteTaskByIdAsync(string taskId, CancellationToken cancellationToken)
-        //{
-        //    using (var conn = new NpgsqlConnection(Config.SqlConnectionString))
-        //    {
-        //        string sql = "DELETE FROM tasks WHERE id = @taskId";
-        //        var affectedRows = await conn.ExecuteAsync(sql, new { taskId });             
-        //        return affectedRows > 0;
-        //    }
-        //} 
+        }              
     }
 }
