@@ -145,8 +145,7 @@ namespace TgTaskBot
         {
             switch (command)
             {
-                case "/start":
-                case "/start@bright_tasks_bot":
+                case "/start":                
                     await _botClient.SendTextMessageAsync(
                         chatId: chatId,
                         text: "Welcome! Please check the menu to see what I can do!",
@@ -154,8 +153,7 @@ namespace TgTaskBot
                         );
                     break;
 
-                case "/help":
-                case "/help@bright_tasks_bot":
+                case "/help":                
                     await _botClient.SendTextMessageAsync(
                         chatId: chatId,
                         text: "Available commands:\n" +
@@ -169,8 +167,7 @@ namespace TgTaskBot
                     );
                     break;
 
-                case "/create":
-                case "/create@bright_tasks_bot":
+                case "/create":                
                     _userStateService.SetState(chatId, UserState.CreatingTask);
                     await _botClient.SendTextMessageAsync(
                         chatId: chatId,
@@ -179,20 +176,17 @@ namespace TgTaskBot
                     );
                     break;
 
-                case "/list":
-                case "/list@bright_tasks_bot":
+                case "/list":                
                     _userStateService.SetState(chatId, UserState.TaskList);
                     await ShowTaskList(chatId,cancellationToken);
                     break;
 
-                case "/complete":
-                case "/complete@bright_tasks_bot":
+                case "/complete":                
                     _userStateService.SetState(chatId, UserState.CompletingTask);
                     await CompleteTask(chatId, cancellationToken);
                     break;
 
-                case "/delete":
-                case "/delete@bright_tasks_bot":
+                case "/delete":               
                     _userStateService.SetState(chatId, UserState.DeletingTask);
                     await DeleteTask(chatId, cancellationToken);
                     break;
